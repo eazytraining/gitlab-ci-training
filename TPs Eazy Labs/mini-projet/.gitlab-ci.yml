@@ -1,134 +1,75 @@
+variables:
+  EAZYLABS_IP: < PUT YOUR EAZYTRAINING CONTAINER IP > # It looks like ip10-0-2-3-cem9qp0mjkegg872cb10
+  APP_NAME: ulrich-staticwebsite
+  EAZYLABS_DOMAIN: direct.docker.labs.eazytraining.fr  
+  API_PORT: "1993"
+  API_ENDPOINT: ${EAZYLABS_IP}-${API_PORT}.${EAZYLABS_DOMAIN}
+  INTERNAL_PORT: 80
+  STG_EXTERNAL_PORT: 8080
+  PROD_EXTERNAL_PORT: 80
+  REVIEW_EXTERNAL_PORT: 8000
+  TEST_PORT: 90
+  CONTAINER_IMAGE: ${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}
+
 image: docker:latest
 services:
   - name: docker:dind
     alias: docker
 
-
 stages:
-  - build
+  - Build image
   - Test acceptation
   - Release image
   - Deploy review
   - Stop review
   - Deploy staging
-  - Test staging  
+  - Test staging
   - Deploy prod
   - Test prod
 
-.test_template: &test
-  image: alpine
-  only:
-    - master
-  script:
-    - apk --no-cache add curl
-    - curl "https://$DOMAIN" | grep "image: docker:latest
-services:
-  - name: docker:dind
-    alias: docker
-
-
-stages:
-  - build
-  - Test acceptation
-  - Release image
-  - Deploy review
-  - Stop review
-  - Deploy staging
-  - Test staging  
-  - Deploy prod
-  - Test prod
-
-.test_template: &test
-  image: alpine
-  only:
-    - master
-  script:
-    - apk --no-cache add curl
-    - curl "https://$DOMAIN" | grep "Start Bootstrap has everything you need to get your new website up and running in no time! All of the templates and themes on Start Bootstrap are open source, free to download, and easy to use. No strings attached!"  
 
 docker-build:
-  # Use the official docker image.
-  stage: build
+  stage: Build image
   script:
-    - docker build -t  webpage .
-    - docker save webpage > webpage.tar
+    - docker build -t ${APP_NAME} .
+    - docker save ${APP_NAME} > ${APP_NAME}.tar
   artifacts:
     paths:
-      - webpage.tar    
-
+      - "${APP_NAME}.tar"
+    when: on_success
+    expire_in: 2 days
 
 test acceptation:
-  # Official docker image.
   stage: Test acceptation
   script:
-    - docker load < webpage.tar
-    - docker run -d -p 80:80 --name webapp webpage
-    - sleep 5
+    - docker load < ${APP_NAME}.tar
+    - docker run -d -p ${TEST_PORT}:${INTERNAL_PORT}  --name webapp ${APP_NAME}
     - apk --no-cache add curl
-    - curl "http://docker" | grep  "Start Bootstrap has everything you need to get your new website up and running in no time! All of the templates and themes on Start Bootstrap are open source, free to download, and easy to use. No strings attached!"
+    - sleep 5
+    - curl "http://docker:${TEST_PORT}" | grep -i "Dimension"
 
 release image:
   stage: Release image
   script:
-    - docker load < webpage.tar
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - docker load < ${APP_NAME}.tar
+    - docker tag ${APP_NAME} "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
+    - docker tag ${APP_NAME} "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
     - docker push "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
     - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
 
-deploy staging:
-  stage: Deploy staging
-  environment:
-    name: staging
-    url: https://eazytraining-staging-9839de32fe85.herokuapp.com
-  only:
-    - master
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-staging || echo "project already exist"
-    - heroku container:push -a eazytraining-staging web
-    - heroku container:release -a eazytraining-staging web
-
-deploy prod:
-  stage: Deploy prod
-  environment:
-    name: prod
-    url: https://eazytraining-prod-70584e6ff38a.herokuapp.com
-  only:
-    - master
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-prod  || echo "project already exist"
-    - heroku container:push -a eazytraining-prod web
-    - heroku container:release -a eazytraining-prod web    
-
-
 deploy review:
   stage: Deploy review
-  only:
-    - merge_requests
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-$CI_COMMIT_REF_NAME  || echo "project already exist"
-    - heroku container:push -a eazytraining-$CI_COMMIT_REF_NAME web
-    - heroku container:release -a eazytraining-$CI_COMMIT_REF_NAME web
-    - REVIEW_ENVIRONMENT_URL=$(heroku info eazytraining-$CI_COMMIT_REF_NAME --json | jq '.app.web_url')
-    - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
-  artifacts:
-    reports:
-      dotenv: deploy.env  
   environment:
     name: review/$CI_COMMIT_REF_NAME
-    url: $REVIEW_ENVIRONMENT_URL
+    url: http://${EAZYLABS_IP}-${REVIEW_EXTERNAL_PORT}.${EAZYLABS_DOMAIN}
     on_stop: stop review
-
+  only: 
+    - merge_requests
+  script:
+    - apk --no-cache add curl
+    - 'curl -i -v -X POST http://${API_ENDPOINT}/review -H "Content-Type: application/json" -d "{\"your_name\":\"${APP_NAME}\",\"container_image\":\"${CONTAINER_IMAGE}\", \"external_port\":\"${REVIEW_EXTERNAL_PORT}\", \"internal_port\":\"${INTERNAL_PORT}\"}" 2>&1 | grep 200'
+    
 stop review:
   stage: Stop review
   variables:
@@ -136,271 +77,54 @@ stop review:
   environment:
     name: review/$CI_COMMIT_REF_NAME
     action: stop
-  only:
+  only: 
     - merge_requests
   when: manual
   script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME
-
-test staging:
-  <<: *test
-  stage: Test staging
-  variables:
-    DOMAIN: eazytraining-staging-9839de32fe85.herokuapp.com
-
-
-test prod:
-  <<: *test
-  stage: Test prod
-  variables:
-    DOMAIN: eazytraining-prod-70584e6ff38a.herokuapp.com"  
-
-docker-build:
-  # Use the official docker image.
-  stage: build
-  script:
-    - docker build -t  webpage .
-    - docker save webpage > webpage.tar
-  artifacts:
-    paths:
-      - webpage.tar    
-
-
-test acceptation:
-  # Official docker image.
-  stage: Test acceptation
-  script:
-    - docker load < webpage.tar
-    - docker run -d -p 80:80 --name webapp webpage
-    - sleep 5
     - apk --no-cache add curl
-    - curl "http://docker" | grep  "image: docker:latest
-services:
-  - name: docker:dind
-    alias: docker
-
-
-stages:
-  - build
-  - Test acceptation
-  - Release image
-  - Deploy review
-  - Stop review
-  - Deploy staging
-  - Test staging  
-  - Deploy prod
-  - Test prod
+    - 'curl -i -v -X DELETE http://${API_ENDPOINT}/review -H "Content-Type: application/json" -d "{\"your_name\":\"${APP_NAME}\"}"'
 
 .test_template: &test
   image: alpine
-  only:
-    - master
+#  only:
+#    - main
   script:
     - apk --no-cache add curl
-    - curl "https://$DOMAIN" | grep "Start Bootstrap has everything you need to get your new website up and running in no time! All of the templates and themes on Start Bootstrap are open source, free to download, and easy to use. No strings attached!"  
-
-docker-build:
-  # Use the official docker image.
-  stage: build
-  script:
-    - docker build -t  webpage .
-    - docker save webpage > webpage.tar
-  artifacts:
-    paths:
-      - webpage.tar    
-
-
-test acceptation:
-  # Official docker image.
-  stage: Test acceptation
-  script:
-    - docker load < webpage.tar
-    - docker run -d -p 80:80 --name webapp webpage
-    - sleep 5
-    - apk --no-cache add curl
-    - curl "http://docker" | grep  "Start Bootstrap has everything you need to get your new website up and running in no time! All of the templates and themes on Start Bootstrap are open source, free to download, and easy to use. No strings attached!"
-
-release image:
-  stage: Release image
-  script:
-    - docker load < webpage.tar
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
-    - docker push "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
-    - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - curl "http://$DOMAIN" | grep -i "Dimension" 
 
 deploy staging:
   stage: Deploy staging
   environment:
     name: staging
-    url: https://eazytraining-staging-9839de32fe85.herokuapp.com
-  only:
-    - master
+    url: http://${EAZYLABS_IP}-${STG_EXTERNAL_PORT}.${EAZYLABS_DOMAIN}
+#  only:
+#    - main
   script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-staging || echo "project already exist"
-    - heroku container:push -a eazytraining-staging web
-    - heroku container:release -a eazytraining-staging web
+    - apk --no-cache add curl
+    - 'curl -i -v -X POST http://${API_ENDPOINT}/staging -H "Content-Type: application/json" -d "{\"your_name\":\"${APP_NAME}\",\"container_image\":\"${CONTAINER_IMAGE}\", \"external_port\":\"${STG_EXTERNAL_PORT}\", \"internal_port\":\"${INTERNAL_PORT}\"}"  2>&1 | grep 200'
+
+test staging:
+  stage: Test staging
+  <<: *test
+  variables:
+    DOMAIN: ${EAZYLABS_IP}-${STG_EXTERNAL_PORT}.${EAZYLABS_DOMAIN}
 
 deploy prod:
   stage: Deploy prod
   environment:
     name: prod
-    url: https://eazytraining-prod-70584e6ff38a.herokuapp.com
-  only:
-    - master
+    url: http://${EAZYLABS_IP}-${PROD_EXTERNAL_PORT}.${EAZYLABS_DOMAIN}
+  only: 
+    - main
   script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-prod  || echo "project already exist"
-    - heroku container:push -a eazytraining-prod web
-    - heroku container:release -a eazytraining-prod web    
-
-
-deploy review:
-  stage: Deploy review
-  only:
-    - merge_requests
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-$CI_COMMIT_REF_NAME  || echo "project already exist"
-    - heroku container:push -a eazytraining-$CI_COMMIT_REF_NAME web
-    - heroku container:release -a eazytraining-$CI_COMMIT_REF_NAME web
-    - REVIEW_ENVIRONMENT_URL=$(heroku info eazytraining-$CI_COMMIT_REF_NAME --json | jq '.app.web_url')
-    - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
-  artifacts:
-    reports:
-      dotenv: deploy.env  
-  environment:
-    name: review/$CI_COMMIT_REF_NAME
-    url: $REVIEW_ENVIRONMENT_URL
-    on_stop: stop review
-
-stop review:
-  stage: Stop review
-  variables:
-    GIT_STRATEGY: none
-  environment:
-    name: review/$CI_COMMIT_REF_NAME
-    action: stop
-  only:
-    - merge_requests
-  when: manual
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME
-
-test staging:
-  <<: *test
-  stage: Test staging
-  variables:
-    DOMAIN: eazytraining-staging-9839de32fe85.herokuapp.com
-
+    - apk --no-cache add curl
+    - 'curl -v -X POST http://${API_ENDPOINT}/prod -H "Content-Type: application/json" -d "{\"your_name\":\"${APP_NAME}\",\"container_image\":\"${CONTAINER_IMAGE}\", \"external_port\":\"${PROD_EXTERNAL_PORT}\", \"internal_port\":\"${INTERNAL_PORT}\"}" 2>&1 | grep 200'
 
 test prod:
-  <<: *test
   stage: Test prod
-  variables:
-    DOMAIN: eazytraining-prod-70584e6ff38a.herokuapp.com"
-
-release image:
-  stage: Release image
-  script:
-    - docker load < webpage.tar
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
-    - docker tag webpage "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
-    - docker push "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
-    - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
-
-deploy staging:
-  stage: Deploy staging
-  environment:
-    name: staging
-    url: https://eazytraining-staging-9839de32fe85.herokuapp.com
-  only:
-    - master
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-staging || echo "project already exist"
-    - heroku container:push -a eazytraining-staging web
-    - heroku container:release -a eazytraining-staging web
-
-deploy prod:
-  stage: Deploy prod
-  environment:
-    name: prod
-    url: https://eazytraining-prod-70584e6ff38a.herokuapp.com
-  only:
-    - master
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-prod  || echo "project already exist"
-    - heroku container:push -a eazytraining-prod web
-    - heroku container:release -a eazytraining-prod web    
-
-
-deploy review:
-  stage: Deploy review
-  only:
-    - merge_requests
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku create eazytraining-$CI_COMMIT_REF_NAME  || echo "project already exist"
-    - heroku container:push -a eazytraining-$CI_COMMIT_REF_NAME web
-    - heroku container:release -a eazytraining-$CI_COMMIT_REF_NAME web
-    - REVIEW_ENVIRONMENT_URL=$(heroku info eazytraining-$CI_COMMIT_REF_NAME --json | jq '.app.web_url')
-    - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
-  artifacts:
-    reports:
-      dotenv: deploy.env  
-  environment:
-    name: review/$CI_COMMIT_REF_NAME
-    url: $REVIEW_ENVIRONMENT_URL
-    on_stop: stop review
-
-stop review:
-  stage: Stop review
-  variables:
-    GIT_STRATEGY: none
-  environment:
-    name: review/$CI_COMMIT_REF_NAME
-    action: stop
-  only:
-    - merge_requests
-  when: manual
-  script:
-    - apk --no-cache add npm
-    - npm install -g heroku
-    - heroku container:login
-    - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME
-
-test staging:
   <<: *test
-  stage: Test staging
   variables:
-    DOMAIN: eazytraining-staging-9839de32fe85.herokuapp.com
+    DOMAIN: ${EAZYLABS_IP}-${PROD_EXTERNAL_PORT}.${EAZYLABS_DOMAIN}
+  only:
+    - main
 
-
-test prod:
-  <<: *test
-  stage: Test prod
-  variables:
-    DOMAIN: eazytraining-prod-70584e6ff38a.herokuapp.com

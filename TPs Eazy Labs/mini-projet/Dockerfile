@@ -1,13 +1,9 @@
-FROM ubuntu:18.04 as files
-LABEL maintainer='TCHASSEM ANSELME'
-RUN apt-get update
-RUN DEBIAN_FRONTEND=noninteractive apt-get install git -y
-RUN mkdir /opt/files
-RUN git clone https://github.com/daviddias/static-webpage-example.git /opt/files/ 
-
-FROM nginx:stable-alpine3.17-slim
-LABEL maintainer='TCHASSEM ANSELME'
-COPY --from=files /opt/files/src/ /usr/share/nginx/html/
-ENTRYPOINT ["/docker-entrypoint.sh"]
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM nginx:1.21.1
+LABEL maintainer="Ulrich MONJI"
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y curl && \
+    apt-get install -y git
+RUN rm -Rf /usr/share/nginx/html/*
+RUN git clone https://github.com/diranetafen/static-website-example.git /usr/share/nginx/html
+CMD nginx -g 'daemon off;'
