@@ -93,10 +93,12 @@ deploy review:
     - apk --no-cache add npm
     - npm install -g heroku
     - heroku container:login
-    - heroku create eazytraining-$CI_COMMIT_REF_NAME  || echo "project already exist"
-    - heroku container:push -a eazytraining-$CI_COMMIT_REF_NAME web
-    - heroku container:release -a eazytraining-$CI_COMMIT_REF_NAME web
-    - REVIEW_ENVIRONMENT_URL=$(heroku info eazytraining-$CI_COMMIT_REF_NAME --json | jq '.app.web_url')
+    - APP_NAME=eazytraining-$CI_COMMIT_REF_NAME
+    - "[[ ${#APP_NAME} -gt 31 ]] && echo 'the name of the heroku application you want to create is longer than 30 characters' && exit 1"
+    - heroku create $APP_NAME  || echo "project already exist"
+    - heroku container:push -a $APP_NAME web
+    - heroku container:release -a $APP_NAME web
+    - REVIEW_ENVIRONMENT_URL=$(heroku info $APP_NAME --json | jq '.app.web_url')
     - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
   artifacts:
     reports:
