@@ -21,7 +21,7 @@ stages:
     - master
   script:
     - apk --no-cache add curl
-    - curl "https://$DOMAIN" | grep "Hello world!"  
+    - curl "$DOMAIN" | grep "Hello world!"  
 
 docker-build:
   # Use the official docker image.
