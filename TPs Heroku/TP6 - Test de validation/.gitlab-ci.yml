@@ -90,7 +90,7 @@ deploy review:
   only:
     - merge_requests
   script:
-    - apk --no-cache add npm
+    - apk --no-cache add npm jq
     - npm install -g heroku
     - heroku container:login
     - APP_NAME=eazytraining-$CI_COMMIT_REF_NAME
@@ -98,7 +98,7 @@ deploy review:
     - heroku create $APP_NAME  || echo "project already exist"
     - heroku container:push -a $APP_NAME web
     - heroku container:release -a $APP_NAME web
-    - REVIEW_ENVIRONMENT_URL=$(heroku info $APP_NAME --json | jq '.app.web_url')
+    - REVIEW_ENVIRONMENT_URL=$(heroku info $APP_NAME --json | jq -r '.app.web_url')
     - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
   artifacts:
     reports:
