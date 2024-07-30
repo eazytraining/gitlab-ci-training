@@ -51,7 +51,7 @@ deploy staging:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-staging || echo "project already exist"
     - heroku container:push -a eazytraining-staging web
@@ -66,7 +66,7 @@ deploy prod:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-prod  || echo "project already exist"
     - heroku container:push -a eazytraining-prod web

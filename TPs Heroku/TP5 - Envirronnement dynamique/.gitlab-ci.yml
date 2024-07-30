@@ -53,7 +53,7 @@ deploy staging:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-staging || echo "project already exist"
     - heroku container:push -a eazytraining-staging web
@@ -68,7 +68,7 @@ deploy prod:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-prod  || echo "project already exist"
     - heroku container:push -a eazytraining-prod web
@@ -81,7 +81,7 @@ deploy review:
     - merge_requests
   script:
     - apk --no-cache add npm jq
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - APP_NAME=eazytraining-$CI_COMMIT_REF_NAME
     - "[[ ${#APP_NAME} -gt 31 ]] && echo 'the name of the heroku application you want to create is longer than 30 characters' && exit 1"
@@ -110,6 +110,6 @@ stop review:
   when: manual
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME

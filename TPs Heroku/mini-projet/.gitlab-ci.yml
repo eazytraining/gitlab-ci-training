@@ -71,7 +71,7 @@ deploy staging:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-staging || echo "project already exist"
     - heroku container:push -a eazytraining-staging web
@@ -87,7 +87,7 @@ deploy prod:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-prod  || echo "project already exist"
     - heroku container:push -a eazytraining-prod web
@@ -100,7 +100,7 @@ deploy review:
     - merge_requests
   script:
     - apk --no-cache add npm jq
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku create eazytraining-$CI_COMMIT_REF_NAME  || echo "project already exist"
     - heroku container:push -a eazytraining-$CI_COMMIT_REF_NAME web
@@ -128,7 +128,7 @@ stop review:
   when: manual
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm i -g heroku@7.68.0
     - heroku container:login
     - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME
 
