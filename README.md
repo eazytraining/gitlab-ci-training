@@ -1,1 +1,1 @@
-# gitlab-ci-training
+# gitlab-ci-training by  [EAZYTraining](https://eazytraining.fr/cours/gitlab-ci-cd-pour-devops/)
