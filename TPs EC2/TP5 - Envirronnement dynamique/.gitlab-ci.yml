@@ -1,0 +1,115 @@
+image: docker:latest
+services:
+  - name: docker:dind
+    alias: docker
+
+
+stages:
+  - build
+  - Test acceptation
+  - Release image
+  - Deploy review
+  - Stop review
+  - Deploy staging
+  - Deploy prod
+
+docker-build:
+  # Use the official docker image.
+  stage: build
+  script:
+    - docker build -t  alpinehelloworld .
+    - docker save alpinehelloworld > alpinehelloworld.tar
+  artifacts:
+    paths:
+      - alpinehelloworld.tar    
+
+
+test acceptation:
+  # Official docker image.
+  stage: Test acceptation
+  script:
+    - docker load < alpinehelloworld.tar
+    - docker run -d -p 80:5000 -e PORT=5000 --name webapp alpinehelloworld
+    - sleep 5
+    - apk --no-cache add curl
+    - curl "http://docker" | grep  "Hello world!"
+
+release image:
+  stage: Release image
+  script:
+    - docker load < alpinehelloworld.tar
+    - docker tag alpinehelloworld "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
+    - docker tag alpinehelloworld "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - docker push "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
+    - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
+
+deploy staging:
+  stage: Deploy staging
+  environment:
+    name: staging
+    url: https://eazytraining-staging-9839de32fe85.herokuapp.com
+  only:
+    - master
+  script:
+    - apk --no-cache add npm
+    - npm install -g heroku
+    - heroku container:login
+    - heroku create eazytraining-staging || echo "project already exist"
+    - heroku container:push -a eazytraining-staging web
+    - heroku container:release -a eazytraining-staging web
+
+deploy prod:
+  stage: Deploy prod
+  environment:
+    name: prod
+    url: https://eazytraining-prod-70584e6ff38a.herokuapp.com
+  only:
+    - master
+  script:
+    - apk --no-cache add npm
+    - npm install -g heroku
+    - heroku container:login
+    - heroku create eazytraining-prod  || echo "project already exist"
+    - heroku container:push -a eazytraining-prod web
+    - heroku container:release -a eazytraining-prod web    
+
+
+deploy review:
+  stage: Deploy review
+  only:
+    - merge_requests
+  script:
+    - apk --no-cache add npm jq
+    - npm install -g heroku
+    - heroku container:login
+    - APP_NAME=eazytraining-$CI_COMMIT_REF_NAME
+    - "[[ ${#APP_NAME} -gt 31 ]] && echo 'the name of the heroku application you want to create is longer than 30 characters' && exit 1"
+    - heroku create $APP_NAME  || echo "project already exist"
+    - heroku container:push -a $APP_NAME web
+    - heroku container:release -a $APP_NAME web
+    - REVIEW_ENVIRONMENT_URL=$(heroku info $APP_NAME --json | jq -r '.app.web_url')
+    - echo "REVIEW_ENVIRONMENT_URL=$REVIEW_ENVIRONMENT_URL" >> deploy.env
+  artifacts:
+    reports:
+      dotenv: deploy.env  
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    url: $REVIEW_ENVIRONMENT_URL
+    on_stop: stop review
+    
+stop review:
+  stage: Stop review
+  variables:
+    GIT_STRATEGY: none
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    action: stop
+  only:
+    - merge_requests
+  when: manual
+  script:
+    - apk --no-cache add npm
+    - npm install -g heroku
+    - heroku container:login
+    - heroku apps:destroy -a eazytraining-$CI_COMMIT_REF_NAME -c eazytraining-$CI_COMMIT_REF_NAME
