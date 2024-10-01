@@ -42,32 +42,44 @@ release image:
     - docker push "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
     - docker push "${IMAGE_NAME}:${CI_COMMIT_SHORT_SHA}"
 
+
 deploy staging:
   stage: Deploy staging
   environment:
     name: staging
-    url: https://eazytraining-staging-9839de32fe85.herokuapp.com # eg: url_a_recuperer_sur_heroku
+    url: https://${HOSTNAME_DEPLOY_STAGING}
+  variables:
+    HEROKU_APP: eazytraining-staging-gitlab
   only:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm install -g heroku@9.3.0
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - docker pull "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
+    - docker tag "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}" registry.heroku.com/${HEROKU_APP}/web
     - heroku container:login
-    - heroku create eazytraining-staging || echo "project already exist"
-    - heroku container:push -a eazytraining-staging web
-    - heroku container:release -a eazytraining-staging web
+    - docker push registry.heroku.com/${HEROKU_APP}/web
+    - heroku stack:set container -a ${HEROKU_APP}
+    - heroku container:release web -a ${HEROKU_APP}
+
 
 deploy prod:
   stage: Deploy prod
   environment:
     name: prod
-    url: https://eazytraining-prod-70584e6ff38a.herokuapp.com # eg: url_a_recuperer_sur_heroku
+    url: https://${HOSTNAME_DEPLOY_PROD} # eg: url_a_recuperer_sur_heroku
+  variables:
+    HEROKU_APP: eazytraining-prod-gitlab
   only:
     - master
   script:
     - apk --no-cache add npm
-    - npm install -g heroku
+    - npm install -g heroku@9.3.0
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+    - docker pull "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}"
+    - docker tag "${IMAGE_NAME}:${CI_COMMIT_REF_NAME}" registry.heroku.com/${HEROKU_APP}/web
     - heroku container:login
-    - heroku create eazytraining-prod  || echo "project already exist"
-    - heroku container:push -a eazytraining-prod web
-    - heroku container:release -a eazytraining-prod web    
+    - docker push registry.heroku.com/${HEROKU_APP}/web
+    - heroku stack:set container -a ${HEROKU_APP}
+    - heroku container:release web -a ${HEROKU_APP}
